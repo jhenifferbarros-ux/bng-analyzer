@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BNG-HUB | Analisador de Licitações (Lei 14.133)</title>
+  
+  <!-- React & ReactDOM UMD (Production) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel para compilar JSX no navegador em tempo real -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+
+  <div id="root"></div>
+
+  <!-- Script JSX compilado pelo Babel -->
+  <script type="text/babel">
+    const { useState, useMemo, useRef } = React;
+
+    // BANCO DE DADOS DA HOLDING (Balanços 2024 e Atestados)
+    const COMPANIES = [
+      { name: "Braços Saúde", pl: 11995125.95, atestados: "Pediatria, Ginecologia, Cirurgia Geral, Anestesiologia, Ortopedia, UTI, Neonatologia, Fisioterapia" },
+      { name: "Gestão do Cuidado", pl: 5954887.42, atestados: "Anestesiologia, Clínica Médica, Psiquiatria, Endocrinologia, Cardiologia, Cirurgia Vascular, Neurocirurgia, Oftalmologia" },
+      { name: "Integralidade Médica", pl: 5115827.34, atestados: "Ortopedia, Ginecologia, Clínica Médica, UTI, Med Família, Telemedicina (Psiquiatria), Angiologia, Reumatologia" },
+      { name: "Envolva Gestão", pl: 4579638.03, atestados: "Clínica Médica, Pediatria, Ortopedia, Emergência, UTI Pediátrica" },
+      { name: "Boas Novas", pl: 2977266.33, atestados: "Pediatria, Anestesiologia, Clínica Médica, Telemedicina, Urologia, Gastro, Dermatologia, Neurologia" },
+      { name: "Arnica Gestão", pl: 773031.44, atestados: "Clínica Médica" }
+    ];
+
+    // MODELOS DE EDITAL DE TESTE
+    const SAMPLES = [
+      {
+        title: "1. UPA Nova Esperança (Prata - Alerta de PL e Multas)",
+        filename: "edital_upa_nova_esperanca_sp.pdf",
+        data: {
+          orgao: 'Prefeitura Municipal de Nova Esperança/SP',
+          objeto: 'Prestação de serviços médicos de Clínica Médica e Pediatria em regime de plantão',
+          volume: '14.500 horas anuais',
+          valor: '3500000',
+          tipoServico: 'Presencial',
+          alertas: 'Edital exige PL de 10% e contém cláusulas de multa abusivas sem previsão de advertência prévia.',
+          nogoFonoOdontoPsico: false,
+          nogoHomeCare: false,
+          nogoAmbulancia: false,
+          nogoEquipamento: false,
+          nogoConstrucao: false,
+          nogoGestao: false,
+          nogoGenerico: false
+        },
+        risks: {
+          elementosAusentes: "Falta de clareza na dotação orçamental específica e ausência da matriz de alocação de riscos (Art. 22, Lei 14.133).",
+          linguagemGenerica: "O item 4.2 cita 'plantões de acordo com a necessidade da administração', termo genérico que impede a precificação exata do risco de ociosidade.",
+          omissaoDocPlanejamento: "O edital não faz menção ao Estudo Técnico Preliminar (ETP) nem está alinhado publicamente ao Plano de Contratações Anual (PCA).",
+          fragilidadesContrato: "O termo de referência não estabelece prazo máximo para pagamento após o ateste da nota fiscal, violando garantias da contratada.",
+          multasESancoes: "Previsão de multa de 20% sobre o valor global em caso de atraso na substituição de profissionais (prazo irreal de 2 horas). Sem direito de defesa prévia.",
+          riscosNaoMapeados: "Risco de glosa por falha no sistema de ponto biométrico da prefeitura não foi mitigado. O ónus da prova recai integralmente sobre a contratada.",
+          sugestoesMelhoria: "Recomenda-se pedido de esclarecimento solicitando a inclusão da matriz de risco, fixação de prazo de 30 dias para pagamento (Art. 141) e revisão do prazo de substituição médica para 12 horas."
+        }
+      },
+      {
+        title: "2. Telemedicina Estado da Bahia (Ouro - Alto Alinhamento)",
+        filename: "edital_telemedicina_ses_ba.pdf",
+        data: {
+          orgao: 'Secretaria de Saúde do Estado da Bahia',
+          objeto: 'Serviço de Telemedicina em Psiquiatria, Cardiologia e Endocrinologia',
+          volume: '24.000 teleconsultas/ano',
+          valor: '2400000',
+          tipoServico: 'Telemedicina',
+          alertas: 'Objeto altamente alinhado aos atestados da Gestão do Cuidado e Integralidade Médica.',
+          nogoFonoOdontoPsico: false,
+          nogoHomeCare: false,
+          nogoAmbulancia: false,
+          nogoEquipamento: false,
+          nogoConstrucao: false,
+          nogoGestao: false,
+          nogoGenerico: false
+        },
+        risks: {
+          elementosAusentes: "Todos os elementos estruturantes da Lei 14.133 estão presentes no termo de referência.",
+          linguagemGenerica: "Linguagem técnica precisa, com delimitação clara de SLAs de atendimento das plataformas de telemedicina.",
+          omissaoDocPlanejamento: "Alinhamento explícito ao ETP nº 42/2025 e ao Planejamento Estratégico de Saúde Digital.",
+          fragilidadesContrato: "Cronograma de pagamento robusto com liquidação em até 15 dias úteis pós-fatura.",
+          multasESancoes: "Penalidades equilibradas e progressivas, iniciando com advertência escrita antes de qualquer sanção pecuniária.",
+          riscosNaoMapeados: "Risco de instabilidade de conectividade mitigado por plano de contingência offline previsto no edital.",
+          sugestoesMelhoria: "Oportunidade de excelência para a nossa subsidiária Gestão do Cuidado. Seguir com a proposta comercial sem necessidade de impugnação."
+        }
+      },
+      {
+        title: "3. Hospital de Campinas - UTI Adulto (Prata - Alta Exigência de PL)",
+        filename: "edital_uti_hmmg_campinas.pdf",
+        data: {
+          orgao: 'Hospital Municipal de Campinas',
+          objeto: 'Prestação de serviços médicos hospitalares em UTI Adulto e Neonatologia',
+          volume: '30 leitos ativos',
+          valor: '125000000',
+          tipoServico: 'Presencial',
+          alertas: 'O valor do lote exige PL de R$ 12.5M, o que excede a nossa maior empresa (Braços: R$ 11.9M). Necessário estruturar consórcio.',
+          nogoFonoOdontoPsico: false,
+          nogoHomeCare: false,
+          nogoAmbulancia: false,
+          nogoEquipamento: false,
+          nogoConstrucao: false,
+          nogoGestao: false,
+          nogoGenerico: false
+        },
+        risks: {
+          elementosAusentes: "Falta de detalhamento sobre o suporte de retaguarda de insumos críticos.",
+          linguagemGenerica: "Trechos que exigem 'dedicação integral sem ônus adicional' para serviços fora da escala de UTI.",
+          omissaoDocPlanejamento: "Apresenta vinculação ao ETP, porém omite a análise de riscos de greves ou pandemias.",
+          fragilidadesContrato: "Obriga a contratada a assumir responsabilidade civil por falhas de infraestrutura do próprio hospital municipal.",
+          multasESancoes: "Cláusula de rescisão unilateral imediata por parte da administração sem contraditório prévio.",
+          riscosNaoMapeados: "Risco de desabastecimento de oxigênio ou medicamentos de alto custo não regulados.",
+          sugestoesMelhoria: "Indispensável impugnar a exigência de PL de 10% de forma isolada, defendendo a soma de PL em Consórcio (Art. 15, Lei 14.133), permitindo a união de Braços Saúde e Gestão do Cuidado."
+        }
+      },
+      {
+        title: "4. Ambulatório de Leme (Desclassificado/NO-GO - Valor Baixo)",
+        filename: "edital_ambulatorio_leme_sp.pdf",
+        data: {
+          orgao: 'Prefeitura Municipal de Leme/SP',
+          objeto: 'Serviços médicos presenciais em Ortopedia e Ginecologia',
+          volume: '120 plantões anuais',
+          valor: '850000',
+          tipoServico: 'Presencial',
+          alertas: 'Edital presencial com valor estimado abaixo da nota de corte da BNG-HUB de R$ 1.200.000,00.',
+          nogoFonoOdontoPsico: false,
+          nogoHomeCare: false,
+          nogoAmbulancia: false,
+          nogoEquipamento: false,
+          nogoConstrucao: false,
+          nogoGestao: false,
+          nogoGenerico: false
+        },
+        risks: {
+          elementosAusentes: "Ausência completa de estudo técnico de viabilidade econômica.",
+          linguagemGenerica: "Linguagem vaga que confunde plantões de especialidades com atendimentos de urgência.",
+          omissaoDocPlanejamento: "Sem qualquer menção a ETP ou Mapa de Risco.",
+          fragilidadesContrato: "Não especifica reajuste inflacionário anual.",
+          multasESancoes: "Multas desproporcionais ao valor irrisório do lote.",
+          riscosNaoMapeados: "Risco de passivo trabalhista médico altíssimo sem amparo regulamentar.",
+          sugestoesMelhoria: "Desclassificação imediata por política comercial interna (Filtro NO-GO: valor presencial inferior a R$ 1.2M). Arquivar o processo."
+        }
+      },
+      {
+        title: "5. Serviço Isolado de Fonoaudiologia (Desclassificado/NO-GO - Objeto Isolado)",
+        filename: "edital_fonoaudiologia_isolado.pdf",
+        data: {
+          orgao: 'Secretaria de Saúde de Santos/SP',
+          objeto: 'Contratação de empresa para serviços exclusivos de Fonoaudiologia escolar',
+          volume: '800 atendimentos/mês',
+          valor: '1800000',
+          tipoServico: 'Presencial',
+          alertas: 'Fonoaudiologia ofertada de forma isolada/exclusiva.',
+          nogoFonoOdontoPsico: true,
+          nogoHomeCare: false,
+          nogoAmbulancia: false,
+          nogoEquipamento: false,
+          nogoConstrucao: false,
+          nogoGestao: false,
+          nogoGenerico: false
+        },
+        risks: {
+          elementosAusentes: "Edital foca apenas em terapias de apoio sem integração com a rede médica principal.",
+          linguagemGenerica: "Critérios de avaliação de evolução dos pacientes extremamente subjetivos.",
+          omissaoDocPlanejamento: "Omitidos documentos de alinhamento com a rede de atenção básica municipal.",
+          fragilidadesContrato: "Falta de regras de reposição de terapeutas em caso de faltas ou licenças.",
+          multasESancoes: "Rescisão e aplicação de multa diária imediata em caso de descumprimento de metas subjetivas.",
+          riscosNaoMapeados: "Alto risco de judicialização por parte dos responsáveis dos alunos por discordância de terapias.",
+          sugestoesMelhoria: "Desclassificado por diretriz de negócio: Fonoaudiologia só é aceita se estiver inserida num lote amplo de especialidades médicas. Arquivar."
+        }
+      }
+    ];
+
+    const INITIAL_RISKS = {
+      elementosAusentes: '',
+      linguagemGenerica: '',
+      omissaoDocPlanejamento: '',
+      fragilidadesContrato: '',
+      multasESancoes: '',
+      riscosNaoMapeados: '',
+      sugestoesMelhoria: ''
+    };
+
+    const INITIAL_STATE = {
+      orgao: '',
+      objeto: '',
+      volume: '',
+      valor: '',
+      tipoServico: 'Presencial',
+      alertas: '',
+      nogoFonoOdontoPsico: false,
+      nogoHomeCare: false,
+      nogoAmbulancia: false,
+      nogoEquipamento: false,
+      nogoConstrucao: false,
+      nogoGestao: false,
+      nogoGenerico: false
+    };
+
+    // --- ÍCONES INLINE SVG PARA REDUZIR DEPENDÊNCIAS DE BUNDLE ---
+    const Icons = {
+      ShieldAlert: () => (
+        <svg className="h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      ),
+      UploadCloud: () => (
+        <svg className="h-12 w-12 text-slate-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+      ),
+      Gavel: () => (
+        <svg className="h-5 w-5 text-red-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+        </svg>
+      ),
+      FileSearch: () => (
+        <svg className="h-5 w-5 text-indigo-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+        </svg>
+      ),
+      Building: () => (
+        <svg className="h-5 w-5 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+      DollarSign: () => (
+        <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M12 16c1.22 0 2.22-.73 2.22-1.63M12 3c5.523 0 9 4.477 9 10s-3.477 10-9 10-9-4.477-9-10 3.477-10 9-10z" />
+        </svg>
+      ),
+      Copy: () => (
+        <svg className="h-4 w-4 text-slate-400 group-hover:text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+        </svg>
+      )
+    };
+
+    function MainApp() {
+      const [currentStep, setCurrentStep] = useState(1);
+      const [formData, setFormData] = useState(INITIAL_STATE);
+      const [isDragging, setIsDragging] = useState(false);
+      const [isAnalyzing, setIsAnalyzing] = useState(false);
+      const [fileUploaded, setFileUploaded] = useState(null);
+      const [risks, setRisks] = useState(INITIAL_RISKS);
+      const [toastMsg, setToast] = useState(null);
+
+      const fileInputRef = useRef(null);
+
+      const steps = [
+        { id: 1, name: "Importar Edital" },
+        { id: 2, name: "Dados do Certame" },
+        { id: 3, name: "Auditoria de Riscos" },
+        { id: 4, name: "Filtros BNG-HUB" },
+        { id: 5, name: "Parecer Executivo" }
+      ];
+
+      const nextStep = () => {
+        if (currentStep < 5) setCurrentStep(prev => prev + 1);
+      };
+
+      const prevStep = () => {
+        if (currentStep > 1) setCurrentStep(prev => prev - 1);
+      };
+
+      const handleInputChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({
+          ...prev,
+          [name]: type === 'checkbox' ? checked : value
+        }));
+      };
+
+      const handleRiskChange = (e) => {
+        const { name, value } = e.target;
+        setRisks(prev => ({
+          ...prev,
+          [name]: value
+        }));
+      };
+
+      const triggerSimulation = (filename) => {
+        setFileUploaded(filename);
+        setIsAnalyzing(true);
+        setTimeout(() => {
+          setFormData(SAMPLES[0].data);
+          setRisks(SAMPLES[0].risks);
+          setIsAnalyzing(false);
+          setCurrentStep(2);
+        }, 2000);
+      };
+
+      const handleFileSelect = (e) => {
+        if (e.target.files && e.target.files[0]) {
+          triggerSimulation(e.target.files[0].name);
+        }
+      };
+
+      const loadSample = (sample) => {
+        setFileUploaded(sample.filename);
+        setIsAnalyzing(true);
+        setTimeout(() => {
+          setFormData(sample.data);
+          setRisks(sample.risks);
+          setIsAnalyzing(false);
+          setCurrentStep(2);
+        }, 1500);
+      };
+
+      const resetAll = () => {
+        setFormData(INITIAL_STATE);
+        setRisks(INITIAL_RISKS);
+        setFileUploaded(null);
+        setCurrentStep(1);
+      };
+
+      const numValor = Number(formData.valor) || 0;
+      const plExigido = numValor * 0.10;
+
+      const isNoGo = formData.nogoFonoOdontoPsico || formData.nogoHomeCare || formData.nogoAmbulancia ||
+                     formData.nogoEquipamento || formData.nogoConstrucao || formData.nogoGestao ||
+                     formData.nogoGenerico || (formData.tipoServico === 'Presencial' && numValor > 0 && numValor <= 1200000);
+
+      const analysis = useMemo(() => {
+        let classificacao = 'Bronze';
+        let alinhamento = 'parcial';
+        let financeiro = (numValor > 1200000 || formData.tipoServico === 'Telemedicina') ? 'atende perfeitamente' : 'não atende';
+        let alertaTexto = formData.alertas || 'Nenhum alerta crítico identificado no mapeamento inicial.';
+        let proximoPasso = 'acionar o time de operações para estruturar a proposta técnica e de custos.';
+
+        if (isNoGo) {
+          classificacao = 'Desclassificado';
+          alinhamento = 'nenhum';
+          financeiro = 'não atende';
+
+          const motivos = [];
+          if (formData.tipoServico === 'Presencial' && numValor > 0 && numValor <= 1200000) motivos.push('Valor Global abaixo de R$ 1.2M');
+          if (formData.nogoFonoOdontoPsico) motivos.push('Odonto/Fono/Psico isolados');
+          if (formData.nogoHomeCare) motivos.push('Home-care');
+          if (formData.nogoAmbulancia) motivos.push('Serviço de ambulância');
+          if (formData.nogoEquipamento) motivos.push('Locação exclusiva de equipamentos');
+          if (formData.nogoConstrucao) motivos.push('Exigência de obra/construção');
+          if (formData.nogoGestao) motivos.push('Apenas gestão (sem serviço médico)');
+          if (formData.nogoGenerico) motivos.push('Edital sem nicho claro');
+
+          alertaTexto = `Oportunidade feriu critérios impeditivos da BNG-HUB: ${motivos.join(', ')}.`;
+          proximoPasso = 'arquivar permanentemente o edital e não iniciar captação de parceiros.';
+        } else if (numValor > 0) {
+          if (numValor >= 5000000 && !formData.alertas) {
+            classificacao = 'Ouro';
+            alinhamento = 'forte';
+          } else if (numValor >= 2000000 || formData.tipoServico === 'Telemedicina') {
+            classificacao = 'Prata';
+            alinhamento = 'forte';
+          }
+
+          if (plExigido > 11995125.95) {
+            alertaTexto = `Exigência de Patrimônio Líquido de ${formatCurrency(plExigido)} supera a nossa maior empresa individualmente (Braços Saúde: R$ 11.9M).`;
+            classificacao = 'Prata';
+            proximoPasso = 'propor a formação de Consórcio entre empresas do grupo (ex: Braços Saúde + Gestão do Cuidado) nos termos do Art. 15 da Lei 14.133.';
+          } else if (risks && risks.multasESancoes.includes('abusivas')) {
+            alertaTexto = `Riscos elevados detectados na seção de multas contratuais e prazos de substituição de profissionais.`;
+            proximoPasso = 'protocolar pedido de esclarecimento oficial para alterar as penalidades abusivas.';
+          }
+        }
+
+        return { classificacao, alinhamento, financeiro, alertaTexto, proximoPasso };
+      }, [formData, isNoGo, numValor, plExigido, risks]);
+
+      const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+      const generatedText = `**Classificação: ${analysis.classificacao}**\n\nO edital de ${formData.orgao || '[Nome do Município/Órgão]'} apresenta ${analysis.alinhamento} alinhamento técnico com o nosso portfólio, focando na prestação de serviços em ${formData.objeto || '[citar especialidades/objeto]'}, com um volume ${formData.volume || '[citar horas/consultas]'}. O certame ${analysis.financeiro} ao nosso critério financeiro, apresentando um valor de ${formatCurrency(numValor)}. Contudo, identificamos um ponto de alerta: ${analysis.alertaTexto} Para que possamos validar a viabilidade financeira e operacional e seguir com a participação, será necessário ${analysis.proximoPasso}`;
+
+      const showToast = (message) => {
+        setToast(message);
+        setTimeout(() => setToast(null), 3500);
+      };
+
+      const copyToClipboard = () => {
+        const textArea = document.createElement("textarea");
+        textArea.value = generatedText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          showToast('Feedbacks executivos copiados com sucesso!');
+        } catch (err) {}
+        document.body.removeChild(textArea);
+      };
+
+      const matchedCompanies = COMPANIES.filter(c => c.pl >= plExigido).sort((a, b) => a.pl - b.pl);
+
+      return (
+        <div className="flex flex-col min-h-screen">
+          
+          {/* TOAST SYSTEM (Substituto seguro do browser alert) */}
+          {toastMsg && (
+            <div className="fixed bottom-5 right-5 bg-slate-800 text-white border border-slate-700 px-4 py-3 rounded-lg shadow-xl z-50 flex items-center gap-2 text-sm animate-bounce">
+              <span className="text-emerald-400">✔</span> {toastMsg}
+            </div>
+          )}
+
+          {/* HEADER */}
+          <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <Icons.ShieldAlert />
+              <div>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight">BNG-HUB | Auditor de Editais Jurídicos</h1>
+                <p className="text-xs text-slate-500">Mapeamento de Riscos, Patrimônio Líquido & Conformidade • Lei 14.133</p>
+              </div>
+            </div>
+            {fileUploaded && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-medium flex items-center gap-1.5">
+                  📁 {fileUploaded}
+                </span>
+                <button onClick={resetAll} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors" title="Limpar e Reiniciar">
+                  🔄 Reiniciar
+                </button>
+              </div>
+            )}
+          </header>
+
+          {/* PASSO A PASSO INDICADOR (WIZARD) */}
+          <div className="bg-white border-b border-slate-200 px-8 py-3 flex justify-between items-center">
+            <div className="flex items-center gap-1 sm:gap-4 overflow-x-auto py-1">
+              {steps.map((s) => (
+                <div key={s.id} className="flex items-center gap-2">
+                  <button 
+                    disabled={!fileUploaded && s.id > 1}
+                    onClick={() => setCurrentStep(s.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      currentStep === s.id 
+                        ? 'bg-indigo-600 text-white shadow' 
+                        : fileUploaded 
+                          ? 'text-slate-600 hover:bg-slate-100' 
+                          : 'text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <span className={`h-5 w-5 flex items-center justify-center rounded-full border text-[10px] ${
+                      currentStep === s.id ? 'border-white bg-indigo-700' : 'border-slate-300'
+                    }`}>
+                      {s.id}
+                    </span>
+                    <span className="hidden md:inline">{s.name}</span>
+                  </button>
+                  {s.id < 5 && <div className="h-px w-4 sm:w-8 bg-slate-200 hidden md:block" />}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {currentStep > 1 && (
+                <button onClick={prevStep} className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 rounded-lg text-xs font-semibold text-slate-600">
+                  ◀ Anterior
+                </button>
+              )}
+              {currentStep < 5 && fileUploaded && (
+                <button onClick={nextStep} className="flex items-center gap-1 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold">
+                  Seguinte ▶
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* CONTEÚDO */}
+          <main className="flex-1 p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* PASSO 1: FILE INGESTION */}
+              {currentStep === 1 && (
+                <div className="space-y-6">
+                  {isAnalyzing ? (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-12 flex flex-col items-center justify-center text-center">
+                      <Loader2 className="h-12 w-12 text-indigo-600 animate-spin mb-4" />
+                      <h3 className="text-lg font-bold text-slate-800">Motor de Leitura IA Ativo</h3>
+                      <p className="text-slate-500 text-sm mt-1 max-w-md">Lendo e estruturando elementos obrigatórios, dotações orçamentárias, matriz de riscos e qualificação jurídica.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div 
+                        className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center transition-all cursor-pointer ${
+                          isDragging ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-300 bg-white hover:bg-slate-50/50'
+                        }`}
+                        onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
+                        onClick={() => fileInputRef.current.click()}
+                      >
+                        <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".pdf,.doc,.docx,.txt" />
+                        <Icons.UploadCloud />
+                        <h3 className="text-lg font-bold text-slate-800 mb-1">Carregue ou Arraste o Edital</h3>
+                        <p className="text-slate-500 text-xs">Suporta arquivos PDF ou Word do Termo de Referência</p>
+                      </div>
+
+                      <div className="bg-white rounded-xl border border-slate-200 p-6">
+                        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                          ⚡ Escolha um Edital de Teste para Iniciar:
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {SAMPLES.map((s, idx) => (
+                            <button 
+                              key={idx}
+                              onClick={() => loadSample(s)}
+                              className="p-4 text-left border border-slate-200 hover:border-indigo-500 rounded-xl bg-slate-50/50 hover:bg-indigo-50/30 transition-all flex flex-col gap-1 group"
+                            >
+                              <span className="font-bold text-xs text-slate-800 group-hover:text-indigo-700">{s.title}</span>
+                              <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                                📄 {s.filename}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* PASSO 2: FORM DATA */}
+              {currentStep === 2 && (
+                <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+                  <h2 className="text-lg font-bold text-slate-900 border-b pb-3 flex items-center gap-2">
+                    <Icons.FileSearch /> Dados Identificados e Extraídos
+                  </h2>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Município ou Órgão Contratante</label>
+                      <input type="text" name="orgao" value={formData.orgao} onChange={handleInputChange} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Global Estimado (R$)</label>
+                        <input type="number" name="valor" value={formData.valor} onChange={handleInputChange} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo de Serviço</label>
+                        <select name="tipoServico" value={formData.tipoServico} onChange={handleInputChange} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                          <option value="Presencial">Presencial (Corte de R$ 1.2M)</option>
+                          <option value="Telemedicina">Telemedicina (Sem limite)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Especialidades Contempladas / Objeto</label>
+                      <input type="text" name="objeto" value={formData.objeto} onChange={handleInputChange} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Volume Estimado (Carga Horária / Consultas)</label>
+                      <input type="text" name="volume" value={formData.volume} onChange={handleInputChange} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Alertas Técnicos Relevantes</label>
+                      <textarea name="alertas" value={formData.alertas} onChange={handleInputChange} rows="3" className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PASSO 3: AUDITORIA DE RISCOS */}
+              {currentStep === 3 && (
+                <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+                  <h2 className="text-lg font-bold text-slate-900 border-b pb-3 flex items-center gap-2 text-red-700">
+                    <Icons.Gavel /> Auditoria da Lei 14.133 (7 Pontos Chave)
+                  </h2>
+                  
+                  <div className="space-y-4">
+                    <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-200 space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">1. Ausência de elementos obrigatórios na Lei:</label>
+                        <textarea name="elementosAusentes" value={risks.elementosAusentes} onChange={handleRiskChange} rows="2" className="w-full p-2 border border-slate-300 rounded text-sm bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">2. Trechos com linguagem genérica/imprecisa:</label>
+                        <textarea name="linguagemGenerica" value={risks.linguagemGenerica} onChange={handleRiskChange} rows="2" className="w-full p-2 border border-slate-300 rounded text-sm bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">3. Omissão de vínculos com ETP, Mapa de Risco ou PCA:</label>
+                        <textarea name="omissaoDocPlanejamento" value={risks.omissaoDocPlanejamento} onChange={handleRiskChange} rows="2" className="w-full p-2 border border-slate-300 rounded text-sm bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">4. Fragilidades no contrato de prestação de serviços:</label>
+                        <textarea name="fragilidadesContrato" value={risks.fragilidadesContrato} onChange={handleRiskChange} rows="2" className="w-full p-2 border border-slate-300 rounded text-sm bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">5. Cláusulas de multas ou processos administrativos para a contratada:</label>
+                        <textarea name="multasESancoes" value={risks.multasESancoes} onChange={handleRiskChange} rows="2" className="w-full p-2 border border-slate-300 rounded text-sm bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">6. Riscos operacionais não mapeados ou mitigados:</label>
+                        <textarea name="riscosNaoMapeados" value={risks.riscosNaoMapeados} onChange={handleRiskChange} rows="2" className="w-full p-2 border border-slate-300 rounded text-sm bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">7. Sugestões de atenção e melhorias (Embasamento Jurídico):</label>
+                        <textarea name="sugestoesMelhoria" value={risks.sugestoesMelhoria} onChange={handleRiskChange} rows="2" className="w-full p-2 border border-slate-300 rounded text-sm bg-white" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PASSO 4: FILTROS NO-GO */}
+              {currentStep === 4 && (
+                <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+                  <h2 className="text-lg font-bold text-slate-900 border-b pb-3 flex items-center gap-2 text-red-700">
+                    ⚠️ Validação de Negócio (GO / NO-GO)
+                  </h2>
+                  <p className="text-xs text-slate-500">Selecione quaisquer itens abaixo caso estejam presentes no edital. Qualquer marcação desclassifica a oportunidade instantaneamente.</p>
+                  
+                  <div className="p-4 bg-red-50/50 rounded-xl border border-red-100 space-y-3">
+                    <label className="flex items-start space-x-3 cursor-pointer p-2 rounded hover:bg-red-50">
+                      <input type="checkbox" name="nogoFonoOdontoPsico" checked={formData.nogoFonoOdontoPsico} onChange={handleInputChange} className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 h-4 w-4" />
+                      <div>
+                        <strong className="text-xs text-red-900 block">Odontologia, Fonoaudiologia ou Psicologia isoladas</strong>
+                        <span className="text-[11px] text-red-700 block">Só atuamos se vier no mesmo lote/pacote integrado a outras especialidades médicas.</span>
+                      </div>
+                    </label>
+                    <label className="flex items-start space-x-3 cursor-pointer p-2 rounded hover:bg-red-50">
+                      <input type="checkbox" name="nogoHomeCare" checked={formData.nogoHomeCare} onChange={handleInputChange} className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 h-4 w-4" />
+                      <div>
+                        <strong className="text-xs text-red-900 block">Serviços de Home-Care</strong>
+                        <span className="text-[11px] text-red-700 block">Veto comercial absoluto.</span>
+                      </div>
+                    </label>
+                    <label className="flex items-start space-x-3 cursor-pointer p-2 rounded hover:bg-red-50">
+                      <input type="checkbox" name="nogoAmbulancia" checked={formData.nogoAmbulancia} onChange={handleInputChange} className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 h-4 w-4" />
+                      <div>
+                        <strong className="text-xs text-red-900 block">Remoção / Serviços de Ambulância</strong>
+                        <span className="text-[11px] text-red-700 block">Veto comercial absoluto.</span>
+                      </div>
+                    </label>
+                    <label className="flex items-start space-x-3 cursor-pointer p-2 rounded hover:bg-red-50">
+                      <input type="checkbox" name="nogoEquipamento" checked={formData.nogoEquipamento} onChange={handleInputChange} className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 h-4 w-4" />
+                      <div>
+                        <strong className="text-xs text-red-900 block">Fornecimento Exclusivo de Equipamento Médico Hospitalar</strong>
+                        <span className="text-[11px] text-red-700 block">Atuamos somente na cessão integrada aos nossos serviços de saúde prestados.</span>
+                      </div>
+                    </label>
+                    <label className="flex items-start space-x-3 cursor-pointer p-2 rounded hover:bg-red-50">
+                      <input type="checkbox" name="nogoConstrucao" checked={formData.nogoConstrucao} onChange={handleInputChange} className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 h-4 w-4" />
+                      <div>
+                        <strong className="text-xs text-red-900 block">Obrigatoriedade de construção de clínica ou espaço físico próprio</strong>
+                        <span className="text-[11px] text-red-700 block">Toda a prestação deve ser em unidades já geridas ou providas pela administração pública.</span>
+                      </div>
+                    </label>
+                    <label className="flex items-start space-x-3 cursor-pointer p-2 rounded hover:bg-red-50">
+                      <input type="checkbox" name="nogoGestao" checked={formData.nogoGestao} onChange={handleInputChange} className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500 h-4 w-4" />
+                      <div>
+                        <strong className="text-xs text-red-900 block">Apenas Gestão / Administração (Sem prestação médica)</strong>
+                        <span className="text-[11px] text-red-700 block">Deve haver prestação direta do serviço de saúde médica corporativa por nós.</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* PASSO 5: PARECER EXECUTIVO */}
+              {currentStep === 5 && (
+                <div className="bg-slate-900 rounded-2xl p-6 text-white space-y-4 shadow-lg">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <h2 className="text-lg font-bold flex items-center gap-2 text-emerald-400">
+                      Parecer Executivo Gerado
+                    </h2>
+                    <button onClick={copyToClipboard} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold group">
+                      <Icons.Copy /> Copiar Texto
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-950 text-slate-100 font-mono text-sm leading-relaxed whitespace-pre-wrap select-all border border-slate-800">
+                    {generatedText}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* COLUNA DIREITA - SIDEBAR JURÍDICO FINANCEIRO */}
+            <div className="space-y-6">
+              
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Habilitação Econômica (Lei 14.133)</h3>
+                
+                <div className="mb-4 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-xs text-slate-500 block">Exigência de PL Estimado (10%):</span>
+                  <span className="text-lg font-bold text-slate-900 flex items-center gap-1">
+                    <Icons.Building /> {formatCurrency(plExigido)}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Subsidiárias Habilitadas:</span>
+                  {numValor === 0 ? (
+                    <div className="text-xs text-slate-400 italic">Carregue um edital para iniciar o matching.</div>
+                  ) : matchedCompanies.length > 0 ? (
+                    matchedCompanies.map((c, idx) => (
+                      <div key={idx} className="p-3 border border-slate-150 rounded-lg bg-white flex flex-col gap-1 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-slate-800">{c.name}</span>
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">PL: {formatCurrency(c.pl)}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 line-clamp-1"><span className="font-semibold text-slate-600">Atestados:</span> {c.atestados}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 bg-red-50 border border-red-150 rounded-lg text-xs text-red-800 flex items-start gap-2">
+                      <div>
+                        <span className="font-bold block">Consórcio Obrigatório</span>
+                        <span>Nenhuma empresa individual possui PL para atender à exigência isoladamente (Máx: R$ 11.9M).</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Conformidade e Critérios</h3>
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100 text-xs">
+                    <span className="text-slate-500">Corte Financeiro (Presencial &gt; 1.2M):</span>
+                    <span className="font-semibold text-slate-800">
+                      {formData.tipoServico === 'Presencial' 
+                        ? numValor > 1200000 
+                          ? <span className="text-emerald-600 flex items-center gap-1">✔ Conforme</span> 
+                          : <span className="text-red-600 flex items-center gap-1">✘ Abaixo</span>
+                        : <span className="text-emerald-600 flex items-center gap-1">✔ Isento (Tele)</span>
+                      }
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100 text-xs">
+                    <span className="text-slate-500">Validade do Objeto Técnico:</span>
+                    <span className="font-semibold text-slate-800">
+                      {formData.nogoFonoOdontoPsico 
+                        ? <span className="text-red-600 flex items-center gap-1">✘ Objeto Isolado</span> 
+                        : <span className="text-emerald-600 flex items-center gap-1">✔ Permitido</span>
+                      }
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100 text-xs">
+                    <span className="text-slate-500">Avaliação Geral do Analista:</span>
+                    <span className="font-semibold text-slate-800">
+                      {analysis.classificacao === 'Ouro' && <span className="text-amber-500 font-bold">Ouro ★★★</span>}
+                      {analysis.classificacao === 'Prata' && <span className="text-slate-400 font-bold">Prata ★★</span>}
+                      {analysis.classificacao === 'Bronze' && <span className="text-amber-700 font-bold">Bronze ★</span>}
+                      {analysis.classificacao === 'Desclassificado' && <span className="text-red-600 font-bold">Desclassificado</span>}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </main>
+        </div>
+      );
+    }
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<MainApp />);
+  </script>
+</body>
+</html>
